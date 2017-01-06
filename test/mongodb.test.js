@@ -1531,6 +1531,7 @@ describe('mongodb connector', function() {
       PostWithLocation = geoDb.define('PostWithLocation', {
         _id: { type: geoDb.ObjectID, id: true },
         location: { type: GeoPoint, index: true },
+        title: { type: String },
       });
       createLocationPost = function(far) {
         var point;
@@ -1567,7 +1568,7 @@ describe('mongodb connector', function() {
       });
     });
 
-    it('find should be able to query by location', function(done) {
+    it.only('find should be able to query by location', function(done) {
       var coords = { lat: 1.25, lng: 20.20 };
 
       geoDb.autoupdate(function(err) {
@@ -1597,6 +1598,67 @@ describe('mongodb connector', function() {
           }, function(err, results) {
             should.not.exist(err);
             should.exist(results);
+
+            var dist = 0;
+            results.forEach(function(result) {
+              var currentDist = testUtils.getDistanceBetweenPoints(coords, result.location);
+              currentDist.should.be.aboveOrEqual(dist);
+              dist = currentDist;
+            });
+
+            done();
+          });
+        });
+      });
+    });
+
+    it('find should be able to query around location in deep/multiple keys', function(done) {
+      var coords = { lat: 1.25, lng: 20.20 };
+
+      geoDb.autoupdate(function(err) {
+        var postNb = 0;
+
+        var createPostWithLocation = function(callback) {
+          postNb++;
+
+          PostWithLocation.create({
+            title: 'Post #' + postNb,
+            location: new GeoPoint({
+              lat: coords.lat + (Math.random() * 2 - 1),
+              lng: coords.lng + (Math.random() * 2 - 1),
+            }),
+          }, callback);
+        };
+
+        async.parallel([
+          createPostWithLocation,
+          createPostWithLocation,
+          createPostWithLocation,
+          createPostWithLocation,
+        ], function(err) {
+          should.not.exist(err);
+
+          PostWithLocation.find({
+            where: {
+              and: [
+                {
+                  location: {
+                    near: new GeoPoint({
+                      lat: coords.lat,
+                      lng: coords.lng,
+                    }),
+                    maxDistance: 5000,
+                  },
+                },
+                {
+                  title: 'Post #2'
+                }
+              ],
+            },
+          }, function(err, results) {
+            should.not.exist(err);
+            should.exist(results);
+            results.should.have.property('length', 1);
 
             var dist = 0;
             results.forEach(function(result) {
