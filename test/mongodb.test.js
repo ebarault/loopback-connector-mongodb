@@ -1611,6 +1611,63 @@ describe('mongodb connector', function() {
       });
     });
 
+    it('find should be able to query by location in deep/multiple keys', function(done) {
+      var coords = { lat: 1.25, lng: 20.20 };
+
+      geoDb.autoupdate(function(err) {
+        var heroNb = 0;
+	var powers = ['fly', 'drink', 'sleep', 'lasers', 'catlady'];
+
+        var createHero = function(callback) {
+          heroNb++;
+          var point = {
+            type: 'Point',
+            coordinates: [coords.lat + Math.random(), coords.lng + Math.random()],
+          };
+
+          Superhero.create({ name: 'Hero ' + heroNb, power: powers[heroNb], geometry: point }, callback);
+        };
+
+        async.parallel([
+          createHero.bind(null),
+          createHero.bind(null),
+          createHero.bind(null),
+          createHero.bind(null),
+        ], function(err) {
+          should.not.exist(err);
+
+          Superhero.find({
+            where: {
+              and: [
+                {
+                  geometry: {
+                    near: [coords.lat, coords.lng],
+                    maxDistance: 5000,
+                  },
+                },
+                {
+                  name: 'Hero 2',
+                },
+              ],
+            },
+          }, function(err, results) {
+            should.not.exist(err);
+            should.exist(results);
+            results.should.have.property('length', 1);
+
+            var dist = 0;
+            results.forEach(function(result) {
+              var currentDist = testUtils.getDistanceBetweenPoints(coords, result.location);
+              currentDist.should.be.aboveOrEqual(dist);
+              dist = currentDist;
+            });
+
+            done();
+          });
+        });
+      });
+    });
+
     it('find should be able to query by location via near with maxDistance', function(done) {
       var coords = { lat: 30.274085, lng: 120.15507000000002 };
 
