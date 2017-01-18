@@ -1531,6 +1531,7 @@ describe('mongodb connector', function() {
       PostWithLocation = geoDb.define('PostWithLocation', {
         _id: { type: geoDb.ObjectID, id: true },
         location: { type: GeoPoint, index: true },
+        title: { type: String },
       });
       createLocationPost = function(far) {
         var point;
@@ -1567,7 +1568,7 @@ describe('mongodb connector', function() {
       });
     });
 
-    it('find should be able to query by location', function(done) {
+    it.only('find should be able to query by location', function(done) {
       var coords = { lat: 1.25, lng: 20.20 };
 
       geoDb.autoupdate(function(err) {
@@ -1611,43 +1612,47 @@ describe('mongodb connector', function() {
       });
     });
 
-    it('find should be able to query by location in deep/multiple keys', function(done) {
+    it('find should be able to query around location in deep/multiple keys', function(done) {
       var coords = { lat: 1.25, lng: 20.20 };
 
       geoDb.autoupdate(function(err) {
-        var heroNb = 0;
-	var powers = ['fly', 'drink', 'sleep', 'lasers', 'catlady'];
+        var postNb = 0;
 
-        var createHero = function(callback) {
-          heroNb++;
-          var point = {
-            type: 'Point',
-            coordinates: [coords.lat + Math.random(), coords.lng + Math.random()],
-          };
+        var createPostWithLocation = function(callback) {
+          postNb++;
 
-          Superhero.create({ name: 'Hero ' + heroNb, power: powers[heroNb], geometry: point }, callback);
+          PostWithLocation.create({
+            title: 'Post #' + postNb,
+            location: new GeoPoint({
+              lat: coords.lat + (Math.random() * 2 - 1),
+              lng: coords.lng + (Math.random() * 2 - 1),
+            }),
+          }, callback);
         };
 
         async.parallel([
-          createHero.bind(null),
-          createHero.bind(null),
-          createHero.bind(null),
-          createHero.bind(null),
+          createPostWithLocation,
+          createPostWithLocation,
+          createPostWithLocation,
+          createPostWithLocation,
         ], function(err) {
           should.not.exist(err);
 
-          Superhero.find({
+          PostWithLocation.find({
             where: {
               and: [
                 {
-                  geometry: {
-                    near: [coords.lat, coords.lng],
+                  location: {
+                    near: new GeoPoint({
+                      lat: coords.lat,
+                      lng: coords.lng,
+                    }),
                     maxDistance: 5000,
                   },
                 },
                 {
-                  name: 'Hero 2',
-                },
+                  title: 'Post #2'
+                }
               ],
             },
           }, function(err, results) {
